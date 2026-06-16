@@ -1,6 +1,6 @@
 import requests
 
-WEBHOOK = "https://discord.com/channels/1516493939220152420/1516494032019390515"
+WEBHOOK = "https://discord.com/api/webhooks/1516494102730899597/ced8oEr4YvTqjMt_PfnEh2_S9zCyR7MRRLevIP1tPNov4BqdkBwam2ovwsltHaEyfV_y"
 
 response = requests.get(
     "https://api.elections.kalshi.com/trade-api/v2/events"
