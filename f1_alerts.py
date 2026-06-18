@@ -1,60 +1,21 @@
 import requests
 import json
-import os
 
-WEBHOOK = "https://discord.com/api/webhooks/1517270620096692384/DZYAAeZuwQgKzh0IEwyX9ZNjmkwgxIoPFtliQi6mUPa-wmyD9iPpWkoMaxG70MSsJUpA"
+r = requests.get(
+    "https://api.elections.kalshi.com/trade-api/v2/events",
+    timeout=20
+)
 
-SEEN_FILE = "seen_markets.json"
-
-# Load previously seen markets
-try:
-    with open(SEEN_FILE, "r") as f:
-        seen = set(json.load(f))
-except:
-    seen = set()
-
-url = "https://api.elections.kalshi.com/trade-api/v2/events"
+print("Status:", r.status_code)
 
 try:
-    r = requests.get(url, timeout=20)
-
-    print("Kalshi status:", r.status_code)
-
     data = r.json()
 
-    new_seen = set(seen)
+    print("Top-level keys:")
+    print(list(data.keys())[:20])
 
-    text = json.dumps(data).lower()
-
-    keywords = [
-        "formula 1",
-        "f1",
-        "grand prix",
-        "verstappen",
-        "norris",
-        "piastri",
-        "leclerc",
-        "hamilton"
-    ]
-
-    if any(word in text for word in keywords):
-
-        marker = str(hash(text))
-
-        if marker not in seen:
-
-            requests.post(
-                WEBHOOK,
-                json={
-                    "content":
-                    "🏎️ Possible new F1 market detected on Kalshi."
-                }
-            )
-
-            new_seen.add(marker)
-
-    with open(SEEN_FILE, "w") as f:
-        json.dump(list(new_seen), f)
+    print(json.dumps(data, indent=2)[:5000])
 
 except Exception as e:
-    print("ERROR:", e)
+    print("JSON ERROR:", e)
+    print(r.text[:5000])
