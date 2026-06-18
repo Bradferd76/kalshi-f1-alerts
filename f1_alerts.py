@@ -1,21 +1,36 @@
 import requests
-import json
 
 r = requests.get(
     "https://api.elections.kalshi.com/trade-api/v2/events",
     timeout=20
 )
 
-print("Status:", r.status_code)
+data = r.json()
 
-try:
-    data = r.json()
+keywords = [
+    "formula",
+    "f1",
+    "grand prix",
+    "verstappen",
+    "norris",
+    "piastri",
+    "hamilton",
+    "leclerc"
+]
 
-    print("Top-level keys:")
-    print(list(data.keys())[:20])
+matches = []
 
-    print(json.dumps(data, indent=2)[:3000])
+for event in data.get("events", []):
 
-except Exception as e:
-    print("JSON ERROR:", e)
-    print(r.text[:3000])
+    title = event.get("title", "")
+    subtitle = event.get("sub_title", "")
+
+    text = (title + " " + subtitle).lower()
+
+    if any(k in text for k in keywords):
+        matches.append(f"{title} | {subtitle}")
+
+print("F1 MATCHES FOUND:", len(matches))
+
+for m in matches:
+    print(m)
