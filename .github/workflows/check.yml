@@ -10,6 +10,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - run: |
+          echo "===== FILE CONTENTS ====="
+          cat f1_alerts.py
+          echo "===== END FILE ====="
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
