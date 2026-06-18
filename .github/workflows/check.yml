@@ -3,9 +3,31 @@ name: Kalshi Alert
 on:
   workflow_dispatch:
 
+  schedule:
+    - cron: '*/15 * * * *'
+
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-      - run: echo "HELLO FROM GITHUB"
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - run: python f1_alerts.py
+
+      - name: Save state
+        run: |
+          git config --global user.name github-actions
+          git config --global user.email github-actions@github.com
+
+          git add seen_markets.json || true
+
+          git commit -m "update seen markets" || true
+
+          git push
