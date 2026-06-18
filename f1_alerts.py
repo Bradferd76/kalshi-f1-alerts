@@ -14,8 +14,8 @@ try:
     print("Top-level keys:")
     print(list(data.keys())[:20])
 
-    print(json.dumps(data, indent=2)[:5000])
+    print(json.dumps(data, indent=2)[:3000])
 
 except Exception as e:
     print("JSON ERROR:", e)
-    print(r.text[:5000])
+    print(r.text[:3000])
