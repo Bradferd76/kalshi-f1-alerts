@@ -4,10 +4,8 @@ WEBHOOK = "https://discord.com/api/webhooks/1516494102730899597/ced8oEr4YvTqjMt_
 
 r = requests.post(
     WEBHOOK,
-    json={
-        "content": "GitHub Actions successfully sent this message."
-    }
+    json={"content": "Hello from GitHub Actions"}
 )
 
-print("Status code:", r.status_code)
-print(r.text)
+print("Status:", r.status_code)
+print("Response:", r.text)
