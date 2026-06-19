@@ -1,7 +1,13 @@
+import json
 import requests
 
-# Replace with your Discord webhook URL
 WEBHOOK = "https://discord.com/api/webhooks/1517270620096692384/DZYAAeZuwQgKzh0IEwyX9ZNjmkwgxIoPFtliQi6mUPa-wmyD9iPpWkoMaxG70MSsJUpA"
+
+SEEN_FILE = "seen_tickers.json"
+
+# Load previously seen tickers
+with open(SEEN_FILE, "r") as f:
+    seen = set(json.load(f))
 
 # Get Kalshi events
 r = requests.get(
@@ -9,44 +15,40 @@ r = requests.get(
     timeout=20
 )
 
-print("Status:", r.status_code)
-
 data = r.json()
 
-matches = []
+updated_seen = set(seen)
 
-# Find only F1 events
 for event in data.get("events", []):
 
     ticker = event.get("event_ticker", "")
 
-    if ticker.startswith("KXF1"):
-        matches.append(event)
-
-print("F1 MATCHES FOUND:", len(matches))
-
-# Send Discord messages
-for event in matches:
+    if not ticker.startswith("KXF1"):
+        continue
 
     title = event.get("title", "")
     subtitle = event.get("sub_title", "")
-    ticker = event.get("event_ticker", "")
 
-    print(f"{title} | {ticker}")
+    if ticker not in seen:
 
-    message = (
-        f"🏎️ F1 Market Found\n"
-        f"Title: {title}\n"
-        f"Subtitle: {subtitle}\n"
-        f"Ticker: {ticker}"
-    )
+        print("NEW F1 MARKET:", ticker)
 
-    response = requests.post(
-        WEBHOOK,
-        json={"content": message}
-    )
+        message = (
+            f"🏎️ NEW F1 MARKET\n"
+            f"Title: {title}\n"
+            f"Subtitle: {subtitle}\n"
+            f"Ticker: {ticker}"
+        )
 
-    print(
-        f"Discord status for {ticker}: "
-        f"{response.status_code}"
-    )
+        response = requests.post(
+            WEBHOOK,
+            json={"content": message}
+        )
+
+        print("Discord status:", response.status_code)
+
+        updated_seen.add(ticker)
+
+# Save updated list
+with open(SEEN_FILE, "w") as f:
+    json.dump(sorted(list(updated_seen)), f, indent=2)
