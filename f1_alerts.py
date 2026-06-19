@@ -1,7 +1,7 @@
 import requests
 
 # Replace with your Discord webhook URL
-WEBHOOK = "PASTE_YOUR_DISCORD_WEBHOOK_HERE"
+WEBHOOK = "https://discord.com/api/webhooks/1517270620096692384/DZYAAeZuwQgKzh0IEwyX9ZNjmkwgxIoPFtliQi6mUPa-wmyD9iPpWkoMaxG70MSsJUpA"
 
 # Get Kalshi events
 r = requests.get(
