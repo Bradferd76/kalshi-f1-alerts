@@ -1,7 +1,8 @@
 import json
 import requests
+import os
 
-WEBHOOK = "https://discord.com/api/webhooks/1517270620096692384/DZYAAeZuwQgKzh0IEwyX9ZNjmkwgxIoPFtliQi6mUPa-wmyD9iPpWkoMaxG70MSsJUpA"
+WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 
 SEEN_FILE = "seen_tickers.json"
 
