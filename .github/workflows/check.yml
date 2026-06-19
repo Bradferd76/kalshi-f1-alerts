@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: '*/15 * * * *'
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -20,3 +23,14 @@ jobs:
       - run: pip install -r requirements.txt
 
       - run: python f1_alerts.py
+
+      - name: Commit updated ticker list
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add seen_tickers.json
+
+          git diff --cached --quiet || git commit -m "Update seen F1 tickers"
+
+          git push
