@@ -17,6 +17,9 @@ r = requests.get(
 
 data = r.json()
 
+print(f"Total events returned: {len(data.get('events', []))}")
+print(f"Seen tickers: {len(seen)}")
+
 updated_seen = set(seen)
 
 for event in data.get("events", []):
