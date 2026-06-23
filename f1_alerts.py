@@ -1,25 +1,21 @@
 import requests
+import json
 
-urls = [
-    "https://api.elections.kalshi.com/v1/cached/markets_by_ticker/KXF1RACE-AUTGP26-ANT",
-    "https://api.elections.kalshi.com/v1/cached/markets_by_ticker/KXF1POLE-AUTGP26-ANT",
-]
+url = "https://api.elections.kalshi.com/v1/events/?series_tickers=KXF1RACE&page_size=50"
 
-for url in urls:
+r = requests.get(url, timeout=20)
 
-    print("\n====================")
-    print(url)
-    print("====================")
+print("Status:", r.status_code)
 
-    r = requests.get(url, timeout=20)
-
-    print("Status:", r.status_code)
-
+try:
     data = r.json()
 
-    market = data.get("market", {})
+    print("Top-level keys:")
+    print(list(data.keys()))
 
-    print("\nKeys in market:")
+    print("\nFirst 5000 chars:")
+    print(json.dumps(data, indent=2)[:5000])
 
-    for key in sorted(market.keys()):
-        print(key)
+except Exception as e:
+    print("ERROR:", e)
+    print(r.text[:5000])
