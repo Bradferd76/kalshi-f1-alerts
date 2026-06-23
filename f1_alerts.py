@@ -1,8 +1,8 @@
 import json
-import requests
 import os
+import requests
 
-WEBHOOK = os.environ["DISCORD_WEBHOOK"]
+WEBHOOK = os.environ["https://discord.com/api/webhooks/1518981667128344646/82IgKJuNzpLzIXZQXCFNo5WlpR94F5ZcSmKaqqgd1EUy0gxuiAa1rfFSBBO1UmNnfmG9"]
 
 SEEN_FILE = "seen_tickers.json"
 
@@ -16,43 +16,25 @@ r = requests.get(
     timeout=20
 )
 
+print("Status:", r.status_code)
+
 data = r.json()
 
 print(f"Total events returned: {len(data.get('events', []))}")
 print(f"Seen tickers: {len(seen)}")
+print("Cursor:", data.get("cursor"))
 
-updated_seen = set(seen)
+print("\n=== F1 TICKERS FOUND IN RESPONSE ===")
+
+f1_count = 0
 
 for event in data.get("events", []):
 
     ticker = event.get("event_ticker", "")
-
-    if not ticker.startswith("KXF1"):
-        continue
-
     title = event.get("title", "")
-    subtitle = event.get("sub_title", "")
 
-    if ticker not in seen:
+    if "F1" in ticker.upper():
+        f1_count += 1
+        print(f"{ticker} | {title}")
 
-        print("NEW F1 MARKET:", ticker)
-
-        message = (
-            f"🏎️ NEW F1 MARKET\n"
-            f"Title: {title}\n"
-            f"Subtitle: {subtitle}\n"
-            f"Ticker: {ticker}"
-        )
-
-        response = requests.post(
-            WEBHOOK,
-            json={"content": message}
-        )
-
-        print("Discord status:", response.status_code)
-
-        updated_seen.add(ticker)
-
-# Save updated list
-with open(SEEN_FILE, "w") as f:
-    json.dump(sorted(list(updated_seen)), f, indent=2)
+print(f"\nTotal F1 tickers found: {f1_count}")
