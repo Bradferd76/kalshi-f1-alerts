@@ -1,37 +1,30 @@
-import json
 import requests
 
-SEEN_FILE = "seen_tickers.json"
-
-# Load previously seen tickers
-with open(SEEN_FILE, "r") as f:
-    seen = set(json.load(f))
-
-# Get Kalshi events
-r = requests.get(
+urls = [
     "https://api.elections.kalshi.com/trade-api/v2/events",
-    timeout=20
-)
+    "https://api.elections.kalshi.com/trade-api/v2/markets"
+]
 
-print("Status:", r.status_code)
+for url in urls:
 
-data = r.json()
+    print("\n====================")
+    print(url)
+    print("====================")
 
-print(f"Total events returned: {len(data.get('events', []))}")
-print(f"Seen tickers: {len(seen)}")
-print("Cursor:", data.get("cursor"))
+    try:
+        r = requests.get(url, timeout=20)
 
-print("\n=== F1 TICKERS FOUND IN RESPONSE ===")
+        print("Status:", r.status_code)
 
-f1_count = 0
+        text = r.text.upper()
 
-for event in data.get("events", []):
+        count = text.count("KXF1")
 
-    ticker = event.get("event_ticker", "")
-    title = event.get("title", "")
+        print("Occurrences of KXF1:", count)
 
-    if "F1" in ticker.upper():
-        f1_count += 1
-        print(f"{ticker} | {title}")
+        if count > 0:
+            idx = text.find("KXF1")
+            print(r.text[max(0, idx-200):idx+1000])
 
-print(f"\nTotal F1 tickers found: {f1_count}")
+    except Exception as e:
+        print("ERROR:", e)
