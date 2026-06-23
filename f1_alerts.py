@@ -1,8 +1,7 @@
 import requests
 
 urls = [
-    "https://api.elections.kalshi.com/trade-api/v2/events",
-    "https://api.elections.kalshi.com/trade-api/v2/markets"
+    "https://api.elections.kalshi.com/v1/cached/markets_by_ticker/KXF1RACE-AUTGP26-ANT",
 ]
 
 for url in urls:
@@ -11,20 +10,20 @@ for url in urls:
     print(url)
     print("====================")
 
+    r = requests.get(url, timeout=20)
+
+    print("Status:", r.status_code)
+
     try:
-        r = requests.get(url, timeout=20)
+        data = r.json()
 
-        print("Status:", r.status_code)
+        if isinstance(data, dict):
+            print("Keys:")
+            print(list(data.keys()))
 
-        text = r.text.upper()
-
-        count = text.count("KXF1")
-
-        print("Occurrences of KXF1:", count)
-
-        if count > 0:
-            idx = text.find("KXF1")
-            print(r.text[max(0, idx-200):idx+1000])
+            print("\nFirst 3000 chars:")
+            print(str(data)[:3000])
 
     except Exception as e:
-        print("ERROR:", e)
+        print("JSON error:", e)
+        print(r.text[:3000])
