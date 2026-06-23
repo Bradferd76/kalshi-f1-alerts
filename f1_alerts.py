@@ -2,6 +2,7 @@ import requests
 
 urls = [
     "https://api.elections.kalshi.com/v1/cached/markets_by_ticker/KXF1RACE-AUTGP26-ANT",
+    "https://api.elections.kalshi.com/v1/cached/markets_by_ticker/KXF1POLE-AUTGP26-ANT",
 ]
 
 for url in urls:
@@ -14,16 +15,11 @@ for url in urls:
 
     print("Status:", r.status_code)
 
-    try:
-        data = r.json()
+    data = r.json()
 
-        if isinstance(data, dict):
-            print("Keys:")
-            print(list(data.keys()))
+    market = data.get("market", {})
 
-            print("\nFirst 3000 chars:")
-            print(str(data)[:3000])
+    print("\nKeys in market:")
 
-    except Exception as e:
-        print("JSON error:", e)
-        print(r.text[:3000])
+    for key in sorted(market.keys()):
+        print(key)
