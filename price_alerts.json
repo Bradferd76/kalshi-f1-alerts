@@ -3,6 +3,30 @@
     "market_type": "podium",
     "driver": "Leclerc",
     "side": "NO",
-    "price_cents": 55
+    "price_cents": 56
+  },
+  {
+    "market_type": "podium",
+    "driver": "norris",
+    "side": "yes",
+    "price_cents": 60
+  },
+  {
+    "market_type": "top 10",
+    "driver": "Bortoleto",
+    "side": "yes",
+    "price_cents": 40
+  },
+    {
+    "market_type": "top 10",
+    "driver": "Hulkenberg",
+    "side": "yes",
+    "price_cents": 40
+  },
+  {
+    "market_type": "podium",
+    "driver": "russell",
+    "side": "yes",
+    "price_cents": 50
   }
 ]
