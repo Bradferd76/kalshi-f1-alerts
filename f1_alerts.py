@@ -5,22 +5,29 @@ import requests
 WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 
 SEEN_FILE = "seen_tickers.json"
-ALERT_FILE = "price_alerts.json"
-STATE_FILE = "price_alert_state.json"
+PRICE_ALERTS_FILE = "price_alerts.json"
+PRICE_STATE_FILE = "price_alert_state.json"
 
-# Kalshi's current public API
+# These are the F1 series we already know how to monitor
+F1_SERIES = [
+    "KXF1RACE",
+    "KXF1POLE",
+    "KXF1TOPCONSTRUCTOR",
+    "KXF1ACTION",
+]
+
 BASE_URL = "https://external-api.kalshi.com/trade-api/v2"
 
 
 # ---------------------------------------------------------
-# BASIC FILE FUNCTIONS
+# Helper functions
 # ---------------------------------------------------------
 
 def load_json(filename, default):
     try:
         with open(filename, "r") as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError:
         return default
 
 
@@ -28,10 +35,6 @@ def save_json(filename, data):
     with open(filename, "w") as f:
         json.dump(data, f, indent=2)
 
-
-# ---------------------------------------------------------
-# DISCORD
-# ---------------------------------------------------------
 
 def send_discord(message):
     response = requests.post(
@@ -42,17 +45,16 @@ def send_discord(message):
 
     print(f"Discord status: {response.status_code}")
 
+    if response.status_code >= 400:
+        print(response.text)
 
-# ---------------------------------------------------------
-# PRICE FUNCTIONS
-# ---------------------------------------------------------
 
-def american_to_probability(american_odds):
+def american_to_probability(odds):
     """
-    Converts American odds into implied probability.
+    Convert American odds to implied probability.
     """
 
-    odds = float(american_odds)
+    odds = float(odds)
 
     if odds < 0:
         return (-odds) / ((-odds) + 100)
@@ -60,434 +62,15 @@ def american_to_probability(american_odds):
     return 100 / (odds + 100)
 
 
-def target_price_cents(american_odds):
-    """
-    Converts American odds into the price in cents
-    that we want to buy at.
-
-    Example:
-        -125 -> approximately 55.6 cents
-    """
-
-    probability = american_to_probability(american_odds)
-
-    return probability * 100
-
-
 # ---------------------------------------------------------
-# MARKET TYPE MATCHING
+# NEW F1 MARKET ALERTS
 # ---------------------------------------------------------
 
-def normalize_market_type(market_type):
-    value = market_type.lower().strip()
-
-    aliases = {
-        "podium": "podium",
-        "top 3": "podium",
-        "top3": "podium",
-        "finish top 3": "podium",
-        "finishes top 3": "podium",
-
-        "top 5": "top 5",
-        "top5": "top 5",
-        "finish top 5": "top 5",
-        "finishes top 5": "top 5",
-
-        "top 10": "top 10",
-        "top10": "top 10",
-        "finish top 10": "top 10",
-        "finishes top 10": "top 10",
-
-        "winner": "winner",
-        "win": "winner",
-        "race winner": "winner",
-        "wins": "winner",
-
-        "pole": "pole",
-        "pole position": "pole",
-        "qualifying": "pole",
-    }
-
-    return aliases.get(value, value)
-
-
-def market_matches_type(title, market_type):
-    """
-    Determines whether a Kalshi market title matches
-    the type requested by the user.
-    """
-
-    title = title.lower()
-    market_type = normalize_market_type(market_type)
-
-    if market_type == "podium":
-        return (
-            "podium" in title
-            or "top 3" in title
-            or "top three" in title
-        )
-
-    if market_type == "top 5":
-        return (
-            "top 5" in title
-            or "top five" in title
-        )
-
-    if market_type == "top 10":
-        return (
-            "top 10" in title
-            or "top ten" in title
-        )
-
-    if market_type == "winner":
-        return (
-            "winner" in title
-            or "win the" in title
-        )
-
-    if market_type == "pole":
-        return (
-            "pole" in title
-            or "pole position" in title
-        )
-
-    return market_type in title
-
-
-# ---------------------------------------------------------
-# DRIVER MATCHING
-# ---------------------------------------------------------
-
-def driver_matches(title, driver):
-    """
-    Match using the driver's last name.
-
-    Example:
-        "Leclerc"
-        matches
-        "Will Charles Leclerc finish on the podium?"
-    """
-
-    title = title.lower()
-    last_name = driver.strip().lower()
-
-    return last_name in title
-
-
-# ---------------------------------------------------------
-# GET ALL OPEN MARKETS
-# ---------------------------------------------------------
-
-def get_open_markets():
-    """
-    Retrieve open markets from Kalshi.
-
-    We use pagination because Kalshi can return more than
-    1,000 markets.
-    """
-
-    markets = []
-    cursor = None
-
-    while True:
-
-        params = {
-            "status": "open",
-            "limit": 1000
-        }
-
-        if cursor:
-            params["cursor"] = cursor
-
-        response = requests.get(
-            f"{BASE_URL}/markets",
-            params=params,
-            timeout=30
-        )
-
-        if response.status_code != 200:
-            print(
-                f"Failed to load markets: "
-                f"{response.status_code}"
-            )
-            break
-
-        data = response.json()
-
-        batch = data.get("markets", [])
-
-        markets.extend(batch)
-
-        print(
-            f"Loaded {len(batch)} markets "
-            f"(total: {len(markets)})"
-        )
-
-        cursor = data.get("cursor")
-
-        if not cursor or not batch:
-            break
-
-    return markets
-
-
-# ---------------------------------------------------------
-# FIND MARKET
-# ---------------------------------------------------------
-
-def find_market(markets, alert):
-    """
-    Search Kalshi's open markets for a market matching:
-
-        market type
-        driver last name
-
-    We also require that the market appears to be
-    Formula 1 related.
-    """
-
-    market_type = normalize_market_type(
-        alert["market_type"]
-    )
-
-    driver = alert["driver"]
-
-    print(
-        f"Searching for: "
-        f"{driver} {market_type}"
-    )
-
-    candidates = []
-
-    for market in markets:
-
-        title = market.get("title", "")
-        subtitle = market.get("subtitle", "")
-        event_ticker = market.get("event_ticker", "")
-        ticker = market.get("ticker", "")
-
-        searchable_text = (
-            f"{title} "
-            f"{subtitle} "
-            f"{event_ticker} "
-            f"{ticker}"
-        ).lower()
-
-        # Make sure this is an F1 market.
-        f1_market = (
-            "formula 1" in searchable_text
-            or "f1" in searchable_text
-            or ticker.upper().startswith("KXF1")
-            or event_ticker.upper().startswith("KXF1")
-        )
-
-        if not f1_market:
-            continue
-
-        if not driver_matches(title, driver):
-            continue
-
-        if not market_matches_type(title, market_type):
-            continue
-
-        candidates.append(market)
-
-    if not candidates:
-        return None
-
-    # Prefer markets whose title contains the exact
-    # requested market type.
-    candidates.sort(
-        key=lambda m: len(m.get("title", ""))
-    )
-
-    return candidates[0]
-
-
-# ---------------------------------------------------------
-# PRICE
-# ---------------------------------------------------------
-
-def get_side_price(market, side):
-    """
-    Return the current ask price for the side we want
-    to buy, in cents.
-
-    Kalshi's API now provides both YES and NO ask prices.
-    """
-
-    side = side.upper()
-
-    if side == "YES":
-        value = market.get("yes_ask_dollars")
-
-    elif side == "NO":
-        value = market.get("no_ask_dollars")
-
-    else:
-        return None
-
-    if value is None:
-        return None
-
-    try:
-        return float(value) * 100
-    except (TypeError, ValueError):
-        return None
-
-
-# ---------------------------------------------------------
-# PRICE ALERT
-# ---------------------------------------------------------
-
-def check_price_alert(markets, alert, alert_number, state):
-
-    driver = alert["driver"]
-    market_type = alert["market_type"]
-    side = alert["side"].upper()
-    american_odds = alert["american_odds"]
-
-    print(
-        f"Checking alert #{alert_number}: "
-        f"{driver} {market_type} {side} {american_odds}"
-    )
-
-    market = find_market(
-        markets,
-        alert
-    )
-
-    if not market:
-
-        print("  Market not found")
-
-        return
-
-    ticker = market.get("ticker", "")
-    title = market.get("title", "")
-
-    print(f"  Found market: {title}")
-    print(f"  Ticker: {ticker}")
-
-    current_price = get_side_price(
-        market,
-        side
-    )
-
-    if current_price is None:
-
-        print("  Price unavailable")
-
-        return
-
-    target_price = target_price_cents(
-        american_odds
-    )
-
-    print(
-        f"  Current {side} ask: "
-        f"{current_price:.1f}¢"
-    )
-
-    print(
-        f"  Target price: "
-        f"{target_price:.1f}¢"
-    )
-
-    # We want to be able to BUY at or below
-    # our target price.
-    if current_price <= target_price:
-
-        # Create a unique key for this alert.
-        alert_key = (
-            f"{driver}|"
-            f"{market_type}|"
-            f"{side}|"
-            f"{american_odds}|"
-            f"{ticker}"
-        )
-
-        # Don't repeatedly alert every 5 minutes.
-        if state.get(alert_key):
-
-            print(
-                "  Threshold reached previously - "
-                "no repeat alert"
-            )
-
-            return
-
-        message = (
-            f"🚨 F1 PRICE ALERT 🚨\n\n"
-            f"Driver: {driver}\n"
-            f"Market: {title}\n"
-            f"Side: {side}\n"
-            f"Current price: {current_price:.1f}¢\n"
-            f"Target: {american_odds:+g} "
-            f"({target_price:.1f}¢)\n\n"
-            f"Ticker: {ticker}"
-        )
-
-        send_discord(message)
-
-        state[alert_key] = True
-
-        print("  🚨 ALERT SENT!")
-
-    else:
-
-        print(
-            "  Threshold not reached"
-        )
-
-
-# ---------------------------------------------------------
-# MAIN PROGRAM
-# ---------------------------------------------------------
-
-print("Loading files...")
-
-seen = load_json(
-    SEEN_FILE,
-    []
-)
-
-price_alerts = load_json(
-    ALERT_FILE,
-    []
-)
-
-price_alert_state = load_json(
-    STATE_FILE,
-    {}
-)
-
-print(
-    f"Loaded {len(price_alerts)} price alerts"
-)
-
-print(
-    f"Loaded {len(seen)} previously seen markets"
-)
-
-
-# ---------------------------------------------------------
-# NEW MARKET ALERTS
-# ---------------------------------------------------------
-
-# Keep your existing F1 series monitoring for
-# new-market notifications.
-
-SERIES = [
-    "KXF1RACE",
-    "KXF1POLE",
-    "KXF1TOPCONSTRUCTOR",
-    "KXF1ACTION",
-]
-
+seen = set(load_json(SEEN_FILE, []))
 updated_seen = set(seen)
 
-for series in SERIES:
+
+for series in F1_SERIES:
 
     url = (
         f"https://api.elections.kalshi.com/v1/events/"
@@ -495,107 +78,440 @@ for series in SERIES:
         f"&page_size=100"
     )
 
-    response = requests.get(
-        url,
-        timeout=20
-    )
-
-    if response.status_code != 200:
-
-        print(
-            f"Failed to load {series}"
-        )
-
+    try:
+        r = requests.get(url, timeout=20)
+    except Exception as e:
+        print(f"Error loading {series}: {e}")
         continue
 
-    data = response.json()
+    if r.status_code != 200:
+        print(f"Failed to load {series}: {r.status_code}")
+        continue
 
-    events = data.get(
-        "events",
-        []
-    )
+    data = r.json()
+    events = data.get("events", [])
 
-    print(
-        f"{series}: "
-        f"{len(events)} events"
-    )
+    print(f"{series}: {len(events)} events")
 
     for event in events:
 
-        ticker = event.get(
-            "ticker",
-            ""
-        )
-
-        title = event.get(
-            "title",
-            ""
-        )
+        ticker = event.get("ticker", "")
+        title = event.get("title", "")
 
         if ticker not in seen:
 
-            print(
-                f"NEW EVENT: {ticker}"
-            )
+            print(f"NEW EVENT: {ticker}")
 
             message = (
-                f"🏎️ NEW F1 MARKET\n\n"
-                f"Title: {title}\n"
-                f"Ticker: {ticker}\n"
-                f"Series: {series}"
+                f"🏎️ **NEW F1 MARKET**\n\n"
+                f"**Title:** {title}\n"
+                f"**Ticker:** {ticker}\n"
+                f"**Series:** {series}"
             )
 
             send_discord(message)
 
-            updated_seen.add(
-                ticker
-            )
+            updated_seen.add(ticker)
+
+
+save_json(SEEN_FILE, sorted(list(updated_seen)))
 
 
 # ---------------------------------------------------------
 # PRICE ALERTS
 # ---------------------------------------------------------
 
-print(
-    "Loading open Kalshi markets..."
-)
+print("\nChecking price alerts...")
 
-all_markets = get_open_markets()
+
+price_alerts = load_json(PRICE_ALERTS_FILE, [])
+price_state = load_json(PRICE_STATE_FILE, {})
+
+
+# ---------------------------------------------------------
+# Find F1-related series
+# ---------------------------------------------------------
+
+def discover_f1_series():
+
+    print("\nDiscovering F1 series...")
+
+    series_list = []
+    cursor = ""
+
+    while True:
+
+        url = f"{BASE_URL}/series?limit=1000"
+
+        if cursor:
+            url += f"&cursor={cursor}"
+
+        try:
+            r = requests.get(url, timeout=20)
+        except Exception as e:
+            print(f"Error loading series: {e}")
+            break
+
+        if r.status_code != 200:
+            print(
+                f"Failed to load series: "
+                f"{r.status_code} {r.text[:200]}"
+            )
+            break
+
+        data = r.json()
+
+        for series in data.get("series", []):
+
+            ticker = str(series.get("ticker", ""))
+            title = str(series.get("title", ""))
+            tags = str(series.get("tags", ""))
+
+            search_text = (
+                f"{ticker} {title} {tags}"
+            ).lower()
+
+            if (
+                "f1" in search_text
+                or "formula 1" in search_text
+            ):
+                series_list.append(series)
+
+        cursor = data.get("cursor")
+
+        if not cursor:
+            break
+
+    print(f"Found {len(series_list)} possible F1 series.")
+
+    for series in series_list:
+        print(
+            f"  {series.get('ticker')} - "
+            f"{series.get('title')}"
+        )
+
+    return series_list
+
+
+# ---------------------------------------------------------
+# Get markets for one series
+# ---------------------------------------------------------
+
+def get_markets_for_series(series_ticker):
+
+    markets = []
+    cursor = ""
+
+    while True:
+
+        url = (
+            f"{BASE_URL}/markets"
+            f"?series_ticker={series_ticker}"
+            f"&status=open"
+            f"&limit=1000"
+        )
+
+        if cursor:
+            url += f"&cursor={cursor}"
+
+        try:
+            r = requests.get(url, timeout=20)
+        except Exception as e:
+            print(
+                f"Error loading markets for "
+                f"{series_ticker}: {e}"
+            )
+            break
+
+        if r.status_code != 200:
+            print(
+                f"Failed to load markets for "
+                f"{series_ticker}: "
+                f"{r.status_code}"
+            )
+            break
+
+        data = r.json()
+
+        markets.extend(data.get("markets", []))
+
+        cursor = data.get("cursor")
+
+        if not cursor:
+            break
+
+    return markets
+
+
+# ---------------------------------------------------------
+# Match market to user's alert
+# ---------------------------------------------------------
+
+def market_matches_alert(market, alert):
+
+    title = str(market.get("title", "")).lower()
+    ticker = str(market.get("ticker", "")).lower()
+
+    driver = alert.get("driver", "").strip().lower()
+    market_type = alert.get("market_type", "").strip().lower()
+
+    # Driver must appear in the market
+    if driver not in title and driver not in ticker:
+        return False
+
+    # Market type matching
+    if market_type == "podium":
+
+        if not any(word in title for word in [
+            "podium",
+            "top 3",
+            "top-three",
+            "top three",
+        ]):
+            return False
+
+    elif market_type in ["top 10", "top10"]:
+
+        if not any(word in title for word in [
+            "top 10",
+            "top10",
+            "top-ten",
+            "top ten",
+        ]):
+            return False
+
+    elif market_type == "winner":
+
+        if not any(word in title for word in [
+            "winner",
+            "win the",
+            "finish in first",
+            "finish first",
+        ]):
+            return False
+
+    elif market_type == "pole":
+
+        if not any(word in title for word in [
+            "pole",
+            "pole position",
+        ]):
+            return False
+
+    else:
+
+        # For an unknown market type, simply search
+        # for that text in the title.
+        if market_type not in title:
+            return False
+
+    return True
+
+
+# ---------------------------------------------------------
+# Run price alerts
+# ---------------------------------------------------------
+
+f1_series = discover_f1_series()
+
+all_markets = []
+
+# Add the known F1 series too
+known_tickers = {
+    series.get("ticker")
+    for series in f1_series
+}
+
+for series_ticker in F1_SERIES:
+    known_tickers.add(series_ticker)
+
+
+print("\nChecking F1 series for open markets...")
+
+
+for series_ticker in known_tickers:
+
+    markets = get_markets_for_series(series_ticker)
+
+    print(
+        f"{series_ticker}: "
+        f"{len(markets)} open markets"
+    )
+
+    all_markets.extend(markets)
+
 
 print(
-    f"Total open markets loaded: "
+    f"\nTotal F1 markets checked: "
     f"{len(all_markets)}"
 )
 
-print(
-    "Checking price alerts..."
-)
 
-for index, alert in enumerate(
+# ---------------------------------------------------------
+# Check each alert
+# ---------------------------------------------------------
+
+for alert_number, alert in enumerate(
     price_alerts,
     start=1
 ):
 
-    check_price_alert(
-        all_markets,
-        alert,
-        index,
-        price_alert_state
+    market_type = alert.get(
+        "market_type",
+        ""
+    )
+
+    driver = alert.get(
+        "driver",
+        ""
+    )
+
+    side = alert.get(
+        "side",
+        "NO"
+    ).upper()
+
+    target_cents = float(
+        alert.get("price_cents", 0)
+    )
+
+    american_odds = alert.get(
+        "american_odds"
+    )
+
+    print(
+        f"\nChecking alert #{alert_number}: "
+        f"{driver} {market_type} "
+        f"{side} at {target_cents}¢"
+    )
+
+    matching_markets = []
+
+    for market in all_markets:
+
+        if market_matches_alert(
+            market,
+            alert
+        ):
+            matching_markets.append(market)
+
+
+    if not matching_markets:
+
+        print("  Market not found.")
+        continue
+
+
+    print(
+        f"  Found {len(matching_markets)} "
+        f"matching market(s)."
     )
 
 
-# ---------------------------------------------------------
-# SAVE STATE
-# ---------------------------------------------------------
+    for market in matching_markets:
 
+        ticker = market.get(
+            "ticker",
+            "UNKNOWN"
+        )
+
+        title = market.get(
+            "title",
+            "Unknown market"
+        )
+
+        # Kalshi prices are returned as decimal dollars.
+        if side == "NO":
+
+            ask = market.get(
+                "no_ask_dollars"
+            )
+
+        else:
+
+            ask = market.get(
+                "yes_ask_dollars"
+            )
+
+
+        if ask is None:
+
+            print(
+                f"  {ticker}: "
+                f"No {side} ask available."
+            )
+
+            continue
+
+
+        current_cents = float(ask) * 100
+
+
+        print(
+            f"  {ticker}: "
+            f"{side} ask = "
+            f"{current_cents:.1f}¢"
+        )
+
+
+        # Unique state key for this particular
+        # alert + market.
+        state_key = (
+            f"{alert_number}:"
+            f"{ticker}"
+        )
+
+
+        # Already alerted?
+        if price_state.get(state_key):
+
+            print(
+                "    Already alerted."
+            )
+
+            continue
+
+
+        # Trigger when price reaches or goes below
+        # user's target.
+        if current_cents <= target_cents:
+
+            message = (
+                f"🚨 **F1 PRICE ALERT** 🚨\n\n"
+                f"**Driver:** {driver.title()}\n"
+                f"**Market:** {title}\n\n"
+                f"**Side:** {side}\n"
+                f"**Current price:** "
+                f"{current_cents:.1f}¢\n"
+                f"**Your threshold:** "
+                f"{target_cents:.0f}¢"
+            )
+
+            if american_odds is not None:
+
+                message += (
+                    f"\n**Target odds:** "
+                    f"{american_odds:+}"
+                )
+
+            message += (
+                f"\n\n**Ticker:** {ticker}"
+            )
+
+            send_discord(message)
+
+            price_state[state_key] = True
+
+            print(
+                "    🚨 ALERT TRIGGERED!"
+            )
+
+
+# Save price alert state
 save_json(
-    SEEN_FILE,
-    sorted(list(updated_seen))
+    PRICE_STATE_FILE,
+    price_state
 )
 
-save_json(
-    STATE_FILE,
-    price_alert_state
-)
 
-print("Finished.")
+print("\nFinished.")
