@@ -6,6 +6,24 @@
     "price_cents": 61
   },
   {
+    "market_type": "top 10",
+    "driver": "lindblad",
+    "side": "YES",
+    "price_cents": 54
+  },
+  {
+    "market_type": "top 10",
+    "driver": "lawson",
+    "side": "YES",
+    "price_cents": 57
+  },
+  {
+    "market_type": "top 10",
+    "driver": "gasly",
+    "side": "YES",
+    "price_cents": 54
+  },
+  {
     "market_type": "podium",
     "driver": "leclerc",
     "side": "no",
