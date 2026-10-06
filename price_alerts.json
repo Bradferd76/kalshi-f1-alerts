@@ -31,9 +31,9 @@
   },
   {
     "market_type": "podium",
-    "driver": "leclerc",
+    "driver": "Russell",
     "side": "no",
-    "price_cents": 62
+    "price_cents": 65
   },
   {
     "market_type": "top 5",
@@ -110,7 +110,7 @@
   {
     "market_type": "top 5",
     "driver": "Russell",
-    "side": "YES",
+    "side": "yes",
     "price_cents": 51
   },
   {
